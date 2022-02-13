@@ -25,6 +25,12 @@ std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>,
                 std::default_delete<flutter::MethodChannel<flutter::EncodableValue>>>
     channel = nullptr;
 
+struct TrayIcon {
+    NOTIFYICONDATA nid;
+    NOTIFYICONIDENTIFIER niif;
+    bool set;
+}
+
 class TrayManagerPlugin : public flutter::Plugin
 {
   public:
@@ -38,10 +44,9 @@ class TrayManagerPlugin : public flutter::Plugin
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> g_converter;
 
     flutter::PluginRegistrarWindows *registrar;
-    NOTIFYICONDATA nid;
-    NOTIFYICONIDENTIFIER niif;
     HMENU hMenu;
-    bool tray_icon_setted = false;
+
+    auto trayIcon = TrayIcon {};
 
     // The ID of the WindowProc delegate registration.
     int window_proc_id = -1;
@@ -150,10 +155,10 @@ std::optional<LRESULT> TrayManagerPlugin::HandleWindowProc(HWND hWnd, UINT messa
     std::optional<LRESULT> result;
     if (message == WM_DESTROY)
     {
-        if (tray_icon_setted)
+        if (trayIcon.set)
         {
-            Shell_NotifyIcon(NIM_DELETE, &nid);
-            DestroyIcon(nid.hIcon);
+            Shell_NotifyIcon(NIM_DELETE, &trayIcon.nid);
+            DestroyIcon(trayIcon.nid.hIcon);
         }
     }
     else if (message == WM_COMMAND)
@@ -188,9 +193,9 @@ HWND TrayManagerPlugin::GetMainWindow()
 void TrayManagerPlugin::Destroy(const flutter::MethodCall<flutter::EncodableValue> &method_call,
                                 std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
 {
-    Shell_NotifyIcon(NIM_DELETE, &nid);
-    DestroyIcon(nid.hIcon);
-    tray_icon_setted = false;
+    Shell_NotifyIcon(NIM_DELETE, &trayIcon.nid);
+    DestroyIcon(trayIcon.nid.hIcon);
+    trayIcon.set = false;
 
     result->Success(flutter::EncodableValue(true));
 }
@@ -201,6 +206,7 @@ void TrayManagerPlugin::SetIcon(const flutter::MethodCall<flutter::EncodableValu
     const flutter::EncodableMap &args = std::get<flutter::EncodableMap>(*method_call.arguments());
 
     std::string iconPath = std::get<std::string>(args.at(flutter::EncodableValue("iconPath")));
+    auto iconId = std::get<std::size_t>(args.at(flutter::EncodableValue("iconId")));
 
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 
@@ -208,28 +214,28 @@ void TrayManagerPlugin::SetIcon(const flutter::MethodCall<flutter::EncodableValu
         static_cast<HICON>(LoadImage(nullptr, (LPCWSTR)(converter.from_bytes(iconPath).c_str()), IMAGE_ICON,
                                      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE));
 
-    if (tray_icon_setted)
+    if (trayIcon.set)
     {
-        nid.hIcon = hIcon;
-        Shell_NotifyIcon(NIM_MODIFY, &nid);
+        trayIcon.nid.hIcon = hIcon;
+        Shell_NotifyIcon(NIM_MODIFY, &trayIcon.nid);
     }
     else
     {
-        nid.cbSize = sizeof(NOTIFYICONDATA);
-        nid.hWnd = GetMainWindow();
-        nid.uCallbackMessage = WM_MYMESSAGE;
-        nid.hIcon = hIcon;
-        nid.uFlags = NIF_MESSAGE | NIF_ICON;
+        trayIcon.nid.cbSize = sizeof(NOTIFYICONDATA);
+        trayIcon.nid.hWnd = GetMainWindow();
+        trayIcon.nid.uCallbackMessage = WM_MYMESSAGE;
+        trayIcon.nid.hIcon = hIcon;
+        trayIcon.nid.uFlags = NIF_MESSAGE | NIF_ICON;
         Shell_NotifyIcon(NIM_ADD, &nid);
         hMenu = CreatePopupMenu();
     }
 
-    niif.cbSize = sizeof(NOTIFYICONIDENTIFIER);
-    niif.hWnd = nid.hWnd;
-    niif.uID = nid.uID;
-    niif.guidItem = GUID_NULL;
+    trayIcon.niif.cbSize = sizeof(NOTIFYICONIDENTIFIER);
+    trayIcon.niif.hWnd = nid.hWnd;
+    trayIcon.niif.uID = nid.uID;
+    trayIcon.niif.guidItem = GUID_NULL;
 
-    tray_icon_setted = true;
+    trayIcon.set = true;
 
     result->Success(flutter::EncodableValue(true));
 }
@@ -242,9 +248,9 @@ void TrayManagerPlugin::SetToolTip(const flutter::MethodCall<flutter::EncodableV
     std::string toolTip = std::get<std::string>(args.at(flutter::EncodableValue("toolTip")));
 
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-    StringCchCopy(nid.szTip, _countof(nid.szTip), converter.from_bytes(toolTip).c_str());
-    Shell_NotifyIcon(NIM_MODIFY, &nid);
+    trayIcon.nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    StringCchCopy(trayIcon.nid.szTip, _countof(trayIcon.nid.szTip), converter.from_bytes(toolTip).c_str());
+    Shell_NotifyIcon(NIM_MODIFY, &trayIcon.nid);
 
     result->Success(flutter::EncodableValue(true));
 }
@@ -293,7 +299,7 @@ void TrayManagerPlugin::GetBounds(const flutter::MethodCall<flutter::EncodableVa
     double devicePixelRatio = std::get<double>(args.at(flutter::EncodableValue("devicePixelRatio")));
 
     RECT rect;
-    Shell_NotifyIconGetRect(&niif, &rect);
+    Shell_NotifyIconGetRect(&trayIcon.niif, &rect);
     flutter::EncodableMap resultMap = flutter::EncodableMap();
 
     double x = rect.left / devicePixelRatio * 1.0f;

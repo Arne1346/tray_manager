@@ -91,6 +91,7 @@ class TrayManager {
   Future<void> setIcon(
     String iconPath, {
     bool isTemplate = false, // macOS only
+    int iconId = 0
   }) async {
     ByteData imageData = await rootBundle.load(iconPath);
     String base64Icon = base64Encode(imageData.buffer.asUint8List());
@@ -104,6 +105,33 @@ class TrayManager {
       ]),
       'base64Icon': base64Icon,
       'isTemplate': isTemplate,
+      'iconId': iconId
+    };
+    await _channel.invokeMethod('setIcon', arguments);
+  }
+
+  /// Sets the image associated with this tray icon.
+  Future<void> setWinIcon(
+    String iconPath, {
+    int iconId = 0,
+    bool isAsset = false
+  }) async {
+    late String myPath;
+
+    if (isAsset) {
+      myPath = path.joinAll([
+        path.dirname(Platform.resolvedExecutable),
+        'data/flutter_assets',
+        iconPath,
+      ]);
+    } else {
+      myPath = path.fromUri(iconPath);
+    }
+
+    final Map<String, dynamic> arguments = {
+      'id': _id,
+      'iconPath': myPath,
+      'iconId': iconId
     };
     await _channel.invokeMethod('setIcon', arguments);
   }
