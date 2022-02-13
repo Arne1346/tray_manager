@@ -29,7 +29,7 @@ struct TrayIcon {
     NOTIFYICONDATA nid;
     NOTIFYICONIDENTIFIER niif;
     bool set;
-}
+};
 
 class TrayManagerPlugin : public flutter::Plugin
 {
